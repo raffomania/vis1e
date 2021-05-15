@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use rayon::prelude::*;
+
 use nannou::{prelude::*, rand::random_f32, ui::prelude::*};
 
 fn main() {
@@ -56,7 +58,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
 
     let bounds = app.window(model.window).unwrap().rect();
-    for agent in &mut model.agents {
+
+    model.agents.par_iter_mut().for_each(|agent| {
         agent.pos += agent.dir;
 
         if (agent.pos.x < bounds.left() && agent.dir.x < 0.0)
@@ -69,7 +72,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         {
             agent.dir.y *= -1.0;
         }
-    }
+    });
 
     let ui = &mut model.ui.set_widgets();
 

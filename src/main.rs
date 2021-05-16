@@ -9,10 +9,15 @@ fn main() {
     nannou::app(model).update(update).run();
 }
 
+struct HistoryEntry {
+    pos: Vector2,
+    opacity: f32,
+}
+
 struct Agent {
     pos: Point2,
     dir: Vector2,
-    history: VecDeque<Vector2>,
+    history: VecDeque<HistoryEntry>,
 }
 
 struct Config {
@@ -53,7 +58,7 @@ fn model(app: &App) -> Model {
 fn random_agent(config: &Config) -> Agent {
     let r1 = random_f32().max(0.2);
     let r2 = random_f32().max(0.2);
-    let dir = (vec2(r1, r2) - vec2(0.5, 0.5)) * 500.0;
+    let dir = (vec2(r1, r2) - vec2(0.5, 0.5)) * 200.0;
     Agent {
         pos: pt2(0.0, 0.0),
         dir,
@@ -64,9 +69,11 @@ fn random_agent(config: &Config) -> Agent {
 fn update(app: &App, model: &mut Model, update: Update) {
     let bounds = app.window(model.window).unwrap().rect();
 
-    model.agents.push_back(random_agent(&model.config));
+    if model.agents.len() < 20 {
+        model.agents.push_back(random_agent(&model.config));
+    }
 
-    if model.agents.len() > 1000 {
+    if model.agents.len() > 20 {
         model.agents.pop_front();
     }
 
@@ -105,10 +112,27 @@ fn update_agent(
     bounds: &nannou::prelude::Rect,
     frame_number: u64,
 ) {
-    // if (frame_number % 10) == 0 {
-    agent.history.push_front(agent.pos);
-    agent.history.truncate(config.trail_length.into());
-    // }
+    for entry in agent.history.iter_mut() {
+        entry.opacity = 0.0.max(entry.opacity - (dt.as_millis().to_f32().unwrap() / 1000.0));
+    }
+
+    if (frame_number % 30) == 0 {
+        agent.history.push_front(HistoryEntry {
+            pos: agent.pos,
+            opacity: 1.0,
+        });
+        match agent
+            .history
+            .get(agent.history.len().checked_sub(4).unwrap_or(0))
+        {
+            Some(entry) => {
+                if entry.opacity < 0.01 {
+                    // agent.history.pop_back();
+                }
+            }
+            _ => (),
+        };
+    }
 
     agent.pos += agent.dir * dt.as_secs_f32();
 
@@ -138,17 +162,21 @@ fn view(app: &App, model: &Model, frame: Frame) {
 }
 
 fn draw_agent(draw: &Draw, agent: &Agent) {
-    let trail_length = agent.history.len();
-    let points = agent.history.iter().enumerate().map(move |(i, pt)| {
-        let intensity = 1.1 - (i.to_f32().unwrap() / trail_length.to_f32().unwrap());
-        let color = rgba(1.0, 1.0, 1.0, intensity);
-        (pt.clone(), color)
+    let points = agent.history.iter().map(move |entry| {
+        let color = rgba(1.0, 1.0, 1.0, entry.opacity);
+        (entry.pos.clone(), color)
     });
 
     draw.polyline().weight(2.0).points_colored(points);
-    // draw.line()
-    //     .weight(2.0)
-    //     .start(agent.pos)
-    //     .end(*agent.history.front().unwrap())
-    //     .color(WHITE);
+
+    let last_position = if let Some(entry) = agent.history.front() {
+        entry.pos
+    } else {
+        -agent.dir
+    };
+    draw.line()
+        .weight(2.0)
+        .start(agent.pos)
+        .end(last_position)
+        .color(WHITE);
 }
